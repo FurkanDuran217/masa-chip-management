@@ -1,0 +1,16 @@
+{
+  "name": "Masa · Çip Yönetimi",
+  "short_name": "Masa",
+  "description": "Masa başı poker çipi yönetimi: oda kur, körleri ayarla, all-in yap, çip say.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#070b10",
+  "theme_color": "#070b10",
+  "lang": "tr",
+  "icons": [
+    { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "./icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#070b10"/>
+  <g>
+    <circle cx="256" cy="256" r="150" fill="#b91c1c" stroke="#f8fafc" stroke-width="12"/>
+    <g fill="#f8fafc">
+      <rect x="246" y="112" width="20" height="42" rx="10"/>
+      <rect x="246" y="358" width="20" height="42" rx="10"/>
+      <rect x="112" y="246" width="42" height="20" rx="10"/>
+      <rect x="358" y="246" width="42" height="20" rx="10"/>
+      <rect x="151" y="151" width="20" height="42" rx="10" transform="rotate(-45 161 172)"/>
+      <rect x="341" y="319" width="20" height="42" rx="10" transform="rotate(-45 351 340)"/>
+      <rect x="341" y="151" width="20" height="42" rx="10" transform="rotate(45 351 172)"/>
+      <rect x="151" y="319" width="20" height="42" rx="10" transform="rotate(45 161 340)"/>
+    </g>
+    <circle cx="256" cy="256" r="94" fill="#fef3c7" stroke="#7f1d1d" stroke-width="10"/>
+    <text x="256" y="284" font-family="Segoe UI, Arial, sans-serif" font-size="80" font-weight="700" fill="#7f1d1d" text-anchor="middle">M</text>
+  </g>
+</svg>
