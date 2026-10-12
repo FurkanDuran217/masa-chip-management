@@ -3,8 +3,10 @@
 // ============================================================
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
-  isFirebaseConnected, syncSubscribeGroup, syncSubscribeHands, syncSubscribeLedger, syncSubscribeMembers, syncSubscribeRooms,
+  isFirebaseConnected, syncSaveGroup, syncSubscribeGroup, syncSubscribeHands, syncSubscribeLedger, syncSubscribeMembers, syncSubscribeRooms,
 } from './lib/firebase';
+import { requestSyncForGroup, initCloudRelay } from './lib/cloudSync';
+import { decodeGroupUrlData, encodeGroupUrlData } from './lib/util';
 import type { Group, HandRecord, LedgerEntry, Member, Room } from './lib/types';
 
 const GROUP_KEY = 'masa_active_group';
@@ -49,9 +51,23 @@ interface Ctx {
 const C = createContext<Ctx | null>(null);
 
 export function StoreProvider({ children }: { children: ReactNode }) {
+  // URL'den direkt taşınan grup verisi (?gd=...)
+  const initialUrlGroup = useMemo(() => {
+    if (typeof window === 'undefined') return null;
+    const gdParam = new URLSearchParams(window.location.search).get('gd');
+    if (gdParam) {
+      const decoded = decodeGroupUrlData(gdParam);
+      if (decoded) {
+        syncSaveGroup(decoded);
+        return decoded;
+      }
+    }
+    return null;
+  }, []);
+
   const [groupId, setGroupIdRaw] = useState<string | null>(() => {
     const fromUrl = new URLSearchParams(location.search).get('g');
-    return fromUrl || localStorage.getItem(GROUP_KEY);
+    return initialUrlGroup?.id || fromUrl || localStorage.getItem(GROUP_KEY);
   });
   const [joinedGroups, setJoinedGroups] = useState<SavedGroupMeta[]>(() => {
     try {
@@ -71,8 +87,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const initialG = new URLSearchParams(location.search).get('g') || localStorage.getItem(GROUP_KEY);
     return initialG ? localStorage.getItem(`${MEMBER_KEY}_${initialG}`) || localStorage.getItem(MEMBER_KEY) : null;
   });
-  const [group, setGroup] = useState<Group | null>(null);
-  const [groupLoaded, setGroupLoaded] = useState(false);
+  const [group, setGroup] = useState<Group | null>(() => initialUrlGroup || null);
+  const [groupLoaded, setGroupLoaded] = useState(() => Boolean(initialUrlGroup));
   const [members, setMembers] = useState<Member[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [roomsLoaded, setRoomsLoaded] = useState(false);
@@ -92,6 +108,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     } else {
       localStorage.removeItem(GROUP_KEY);
       setMeIdRaw(null);
+      if (typeof window !== 'undefined') {
+        history.replaceState(null, '', location.pathname);
+      }
     }
     setGroupIdRaw(id);
     setView({ name: 'lobby' });
@@ -128,14 +147,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    setGroup(null);
-    setGroupLoaded(false);
+    if (!initialUrlGroup || initialUrlGroup.id !== groupId) {
+      setGroup(null);
+      setGroupLoaded(false);
+    }
     setMembers([]);
     setRooms([]);
     setRoomsLoaded(false);
     setHands([]);
     setLedger([]);
     if (!groupId) return;
+
+    // Buluttaki diğer cihazlardan bu grup için güncel verileri iste
+    requestSyncForGroup(groupId);
+
     let timeoutTimer: number | undefined;
     const offs = [
       syncSubscribeGroup(groupId, (g) => {
@@ -163,25 +188,36 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       syncSubscribeLedger(groupId, setLedger),
     ];
 
-    // Bulut senkronizasyonu için bekleme payı ver; grup bulunamazsa loaded=true yap
+    // Bulut senkronizasyonu için bekleme payı ver (mobil bağlantılar için 8 saniye)
     timeoutTimer = window.setTimeout(() => {
       setGroupLoaded(true);
-    }, 3500);
+    }, 8000);
 
     return () => {
       if (timeoutTimer) window.clearTimeout(timeoutTimer);
       offs.forEach((f) => f());
     };
-  }, [groupId]);
+  }, [groupId, initialUrlGroup]);
 
-  // URL'yi görünümle senkron tut (paylaşılabilir link)
+  // İlk açılışta bulut rölesini hemen başlat
+  useEffect(() => {
+    initCloudRelay();
+  }, []);
+
+  // URL'yi görünümle senkron tut (paylaşılabilir ve kendinden zarflı link)
   useEffect(() => {
     const p = new URLSearchParams();
-    if (groupId) p.set('g', groupId);
+    if (groupId) {
+      p.set('g', groupId);
+      if (group) {
+        const gd = encodeGroupUrlData(group);
+        if (gd) p.set('gd', gd);
+      }
+    }
     if (view.name === 'room') p.set('r', view.roomId);
     const q = p.toString();
     history.replaceState(null, '', q ? `?${q}` : location.pathname);
-  }, [groupId, view]);
+  }, [groupId, group, view]);
 
   const notify = (msg: string) => {
     setToast(msg);

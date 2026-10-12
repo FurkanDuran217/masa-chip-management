@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useStore } from '../store';
 import { createRoom } from '../lib/actions';
-import { fmt } from '../lib/util';
+import { fmt, encodeGroupUrlData } from '../lib/util';
 import { Plus, Play, Users, ExternalLink } from 'lucide-react';
 
 export const LobbyView: React.FC = () => {
@@ -32,11 +32,18 @@ export const LobbyView: React.FC = () => {
   };
 
   const copyInvite = () => {
-    const inviteUrl = window.location.origin + window.location.pathname + `?g=${group.id}`;
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(inviteUrl);
-      notify(`Davet linki panoya kopyalandı! (Grup Kodu: ${group.id})`);
-    } else {
+    const gd = encodeGroupUrlData(group);
+    const inviteUrl = window.location.origin + window.location.pathname + `?g=${group.id}${gd ? `&gd=${gd}` : ''}`;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(inviteUrl).then(
+          () => notify(`Davet linki panoya kopyalandı! (Kod: ${group.id})`),
+          () => prompt('Davet linkini kopyalayın:', inviteUrl)
+        );
+      } else {
+        prompt('Davet linkini kopyalayın:', inviteUrl);
+      }
+    } catch {
       prompt('Davet linkini kopyalayın:', inviteUrl);
     }
   };

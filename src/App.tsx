@@ -31,12 +31,15 @@ export const App: React.FC = () => {
   if (groupId && groupLoaded && !group) {
     return (
       <div className="center-screen">
-        <div className="card" style={{ textAlign: 'center', padding: '36px 20px', maxWidth: 400 }}>
-          <div style={{ fontSize: 36, marginBottom: 12 }}>⚠️</div>
+        <div className="card" style={{ textAlign: 'center', padding: '36px 20px', maxWidth: 420 }}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>⚠️</div>
           <h3 style={{ margin: '0 0 8px', fontSize: 18 }}>Grup Bulunamadı</h3>
-          <p className="muted" style={{ margin: '0 0 20px', fontSize: 14 }}>
+          <p className="muted" style={{ margin: '0 0 16px', fontSize: 14 }}>
             `<span className="mono gold">{groupId}</span>` kodlu grup bulunamadı veya henüz senkronize edilmedi.
           </p>
+          <div className="muted" style={{ fontSize: 12, marginBottom: 20, background: 'rgba(255,255,255,0.04)', padding: 10, borderRadius: 8 }}>
+            💡 <strong>İpucu:</strong> Grubu oluşturan cihaz açıksa otomatik bağlanacaktır. Ayrıca gruptaki "Daveti Kopyala" butonuna basarak kopyalanan link ile anında bağlanabilirsiniz.
+          </div>
           <div className="col" style={{ gap: 8 }}>
             <button className="btn primary block" onClick={() => window.location.reload()}>
               Tekrar Dene
