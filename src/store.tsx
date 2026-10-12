@@ -27,6 +27,7 @@ interface Ctx {
   joinedGroups: SavedGroupMeta[];
   members: Member[];
   rooms: Room[];
+  roomsLoaded: boolean;
   hands: HandRecord[];
   ledger: LedgerEntry[];
   me: Member | null;
@@ -36,6 +37,7 @@ interface Ctx {
   unlockGroup: (id: string) => void;
   switchGroup: (id: string) => void;
   leaveGroup: (id: string) => void;
+  addRoomOptimistic: (r: Room) => void;
   setGroupId: (id: string | null) => void;
   setMeId: (id: string | null) => void;
   go: (v: View) => void;
@@ -73,6 +75,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [groupLoaded, setGroupLoaded] = useState(false);
   const [members, setMembers] = useState<Member[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
+  const [roomsLoaded, setRoomsLoaded] = useState(false);
   const [hands, setHands] = useState<HandRecord[]>([]);
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);
   const [view, setView] = useState<View>(() => {
@@ -119,11 +122,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const addRoomOptimistic = (r: Room) => {
+    setRooms((prev) => [r, ...prev.filter((x) => x.id !== r.id)]);
+    setRoomsLoaded(true);
+  };
+
   useEffect(() => {
     setGroup(null);
     setGroupLoaded(false);
     setMembers([]);
     setRooms([]);
+    setRoomsLoaded(false);
     setHands([]);
     setLedger([]);
     if (!groupId) return;
@@ -144,7 +153,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         }
       }),
       syncSubscribeMembers(groupId, (m) => setMembers(m.sort((a, b) => a.createdAt - b.createdAt))),
-      syncSubscribeRooms(groupId, (r) => setRooms(r.sort((a, b) => b.createdAt - a.createdAt))),
+      syncSubscribeRooms(groupId, (r) => {
+        setRooms(r.sort((a, b) => b.createdAt - a.createdAt));
+        setRoomsLoaded(true);
+      }),
       syncSubscribeHands(groupId, setHands),
       syncSubscribeLedger(groupId, setLedger),
     ];
@@ -188,8 +200,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const isGroupUnlocked = !group?.passwordHash || Boolean(groupId && unlockedGroups[groupId]);
 
   const value: Ctx = {
-    online: isFirebaseConnected(), groupId, group, groupLoaded, joinedGroups, members, rooms, hands, ledger, me, view, toast,
-    isGroupUnlocked, unlockGroup, switchGroup, leaveGroup,
+    online: isFirebaseConnected(), groupId, group, groupLoaded, joinedGroups, members, rooms, roomsLoaded, hands, ledger, me, view, toast,
+    isGroupUnlocked, unlockGroup, switchGroup, leaveGroup, addRoomOptimistic,
     setGroupId, setMeId, go: setView, notify, run,
   };
   return <C.Provider value={value}>{children}</C.Provider>;

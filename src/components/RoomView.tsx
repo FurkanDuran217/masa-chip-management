@@ -1,27 +1,47 @@
 import React, { useState } from 'react';
 import { useStore } from '../store';
-import { act, buyIn, cashOut, undo } from '../lib/actions';
+import { act, buyIn, cashOut, undo, addMember } from '../lib/actions';
 import { canRaise, minRaiseTo, maxRaiseTo, toCall, potTotal, computePots, STREET_LABEL } from '../lib/engine';
 import { fmt } from '../lib/util';
 import { sound, vibrate } from '../lib/sound';
-import { ArrowLeft, RotateCcw, LogOut, PlusCircle, Check } from 'lucide-react';
+import { ArrowLeft, RotateCcw, LogOut, PlusCircle, Check, UserPlus } from 'lucide-react';
 
 export const RoomView: React.FC<{ roomId: string }> = ({ roomId }) => {
-  const { group, me, members, rooms, go, run, notify } = useStore();
+  const { group, groupLoaded, me, members, rooms, roomsLoaded, go, run, notify, addRoomOptimistic } = useStore();
   const room = rooms.find((r) => r.id === roomId);
 
   const [raiseVal, setRaiseVal] = useState<number>(0);
   const [showBuyInModal, setShowBuyInModal] = useState(false);
   const [buyInAmount, setBuyInAmount] = useState<number>(200);
   const [targetMemberId, setTargetMemberId] = useState<string>('');
+  const [isAddingGuest, setIsAddingGuest] = useState(false);
+  const [newGuestName, setNewGuestName] = useState('');
   const [showResolveModal, setShowResolveModal] = useState(false);
   const [winners, setWinners] = useState<string[][]>([]);
 
+  // 1. Veriler henüz yükleniyorsa spinner göster (asla doğrudan "masa bulunamadı" deme)
+  if (!groupLoaded || !roomsLoaded) {
+    return (
+      <div className="center-screen">
+        <div className="card" style={{ textAlign: 'center', padding: '40px 24px', maxWidth: 360 }}>
+          <div className="spinner" style={{ margin: '0 auto 16px', width: 36, height: 36 }} />
+          <h3 style={{ margin: '0 0 8px', fontSize: 18 }}>Masa Yükleniyor...</h3>
+          <p className="muted" style={{ margin: 0, fontSize: 13 }}>Masa durumu ve oyuncular senkronize ediliyor</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. Yüklendi ve oda gerçekten yoksa
   if (!group || !room || !me) {
     return (
       <div className="center-screen">
-        <div className="card">
-          <p>Masa bulunamadı veya kapatılmış.</p>
+        <div className="card" style={{ textAlign: 'center', padding: '36px 20px', maxWidth: 380 }}>
+          <div style={{ fontSize: 36, marginBottom: 12 }}>♠️</div>
+          <h3 style={{ margin: '0 0 8px', fontSize: 18 }}>Masa bulunamadı veya kapatılmış.</h3>
+          <p className="muted" style={{ margin: '0 0 20px', fontSize: 13 }}>
+            Bu masa kapatılmış veya silinmiş olabilir.
+          </p>
           <button className="btn primary block" onClick={() => go({ name: 'lobby' })}>
             Lobiye Dön
           </button>
@@ -48,6 +68,25 @@ export const RoomView: React.FC<{ roomId: string }> = ({ roomId }) => {
   const maxR = mySeatIdx >= 0 ? maxRaiseTo(state, mySeatIdx) : 0;
   const callAmt = mySeatIdx >= 0 ? toCall(state, mySeatIdx) : 0;
 
+  // Buy-in modal açıcı
+  const openBuyInModal = (preferredId?: string) => {
+    const isMeSeated = state.seats.some((s) => s.memberId === me.id);
+    let chosenId = preferredId;
+    if (!chosenId) {
+      if (!isMeSeated) {
+        chosenId = me.id;
+      } else {
+        const unseated = members.find((m) => !state.seats.some((s) => s.memberId === m.id));
+        chosenId = unseated ? unseated.id : me.id;
+      }
+    }
+    setTargetMemberId(chosenId || me.id);
+    setBuyInAmount(settings.startingStack || 200);
+    setIsAddingGuest(false);
+    setNewGuestName('');
+    setShowBuyInModal(true);
+  };
+
   // Aksiyonlar
   const handleAction = async (action: any) => {
     await run(async () => {
@@ -57,7 +96,8 @@ export const RoomView: React.FC<{ roomId: string }> = ({ roomId }) => {
       else if (action.type === 'raise') sound.raise();
       else if (action.type === 'allin') sound.raise();
 
-      await act(group.id, room, action);
+      const res = await act(group.id, room, action);
+      if (res?.room) addRoomOptimistic(res.room);
     });
   };
 
@@ -69,23 +109,35 @@ export const RoomView: React.FC<{ roomId: string }> = ({ roomId }) => {
     }
     await run(async () => {
       sound.chip();
-      await act(group.id, room, { type: 'start' });
+      const res = await act(group.id, room, { type: 'start' });
+      if (res?.room) addRoomOptimistic(res.room);
     });
   };
 
   const handleBuyInSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const target = members.find((m) => m.id === (targetMemberId || me.id)) || me;
     await run(async () => {
-      await buyIn(group.id, room, target, Number(buyInAmount));
+      let targetUser = members.find((m) => m.id === (targetMemberId || me.id)) || me;
+
+      // Yeni misafir oyuncu ekleme seçildiyse
+      if (isAddingGuest && newGuestName.trim()) {
+        targetUser = await addMember(group, newGuestName.trim(), '1234', members);
+      }
+
+      const amt = Number(buyInAmount) || settings.startingStack || 200;
+      const updated = await buyIn(group.id, room, targetUser, amt, true);
+      addRoomOptimistic(updated);
       setShowBuyInModal(false);
+      sound.chip();
+      notify(`${targetUser.name} ${fmt(amt)} çip ile masaya oturdu!`);
     });
   };
 
   const handleCashOut = async () => {
     if (!window.confirm('Masadaki çiplerinizi havuza aktarıp kalkmak istiyor musunuz?')) return;
     await run(async () => {
-      await cashOut(group.id, room, me);
+      const updated = await cashOut(group.id, room, me);
+      if (updated) addRoomOptimistic(updated);
     });
   };
 
@@ -103,7 +155,8 @@ export const RoomView: React.FC<{ roomId: string }> = ({ roomId }) => {
   const submitResolve = async () => {
     await run(async () => {
       sound.win();
-      await act(group.id, room, { type: 'resolve', winners });
+      const res = await act(group.id, room, { type: 'resolve', winners });
+      if (res?.room) addRoomOptimistic(res.room);
       setShowResolveModal(false);
     });
   };
@@ -130,7 +183,7 @@ export const RoomView: React.FC<{ roomId: string }> = ({ roomId }) => {
               <RotateCcw size={16} />
             </button>
           )}
-          <button className="btn" style={{ fontSize: 13, padding: '6px 12px' }} onClick={() => setShowBuyInModal(true)}>
+          <button className="btn" style={{ fontSize: 13, padding: '6px 12px' }} onClick={() => openBuyInModal()}>
             <PlusCircle size={14} /> {mySeat ? 'Oyuncu / Çip Ekle' : 'Masaya Otur'}
           </button>
           {mySeat && (
@@ -168,7 +221,7 @@ export const RoomView: React.FC<{ roomId: string }> = ({ roomId }) => {
                 key={`empty_${idx}`}
                 className="seat empty-seat"
                 style={{ left: `${left}%`, top: `${top}%` }}
-                onClick={() => setShowBuyInModal(true)}
+                onClick={() => openBuyInModal()}
                 title="Masaya Otur / Oyuncu Ekle"
               >
                 <div className="empty-seat-plus">+</div>
@@ -233,7 +286,7 @@ export const RoomView: React.FC<{ roomId: string }> = ({ roomId }) => {
               </div>
             </div>
             <div className="row" style={{ gap: 8 }}>
-              <button className="btn" onClick={() => setShowBuyInModal(true)}>
+              <button className="btn" onClick={() => openBuyInModal()}>
                 <PlusCircle size={15} /> Oyuncu Ekle / Oturt
               </button>
               <button
@@ -337,43 +390,98 @@ export const RoomView: React.FC<{ roomId: string }> = ({ roomId }) => {
       {showBuyInModal && (
         <div className="backdrop" onClick={() => setShowBuyInModal(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2>Masaya Oyuncu / Çip Ekle</h2>
-            <form onSubmit={handleBuyInSubmit} className="col">
-              <div className="field">
-                <label>Oyuncu Seç</label>
-                <select
-                  className="input"
-                  value={targetMemberId || me.id}
-                  onChange={(e) => setTargetMemberId(e.target.value)}
-                >
-                  {members.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.emoji} {m.name} (Havuz: {fmt(m.balance)} çip)
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+              <h2 style={{ margin: 0, fontSize: 18 }}>Masaya Otur / Oyuncu Ekle</h2>
+              <button
+                type="button"
+                className="btn ghost"
+                onClick={() => setIsAddingGuest(!isAddingGuest)}
+                style={{ fontSize: 12, padding: '4px 10px' }}
+              >
+                <UserPlus size={13} /> {isAddingGuest ? 'Gruptan Seç' : '+ Yeni Misafir'}
+              </button>
+            </div>
+
+            <form onSubmit={handleBuyInSubmit} className="col" style={{ gap: 14 }}>
+              {isAddingGuest ? (
+                <div className="field">
+                  <label>Yeni Oyuncu Adı</label>
+                  <input
+                    type="text"
+                    className="input"
+                    placeholder="örn. Can, Barış, Murat..."
+                    value={newGuestName}
+                    onChange={(e) => setNewGuestName(e.target.value)}
+                    required
+                    autoFocus
+                  />
+                </div>
+              ) : (
+                <div className="field">
+                  <label>Oyuncu Seç</label>
+                  <select
+                    className="input"
+                    value={targetMemberId || me.id}
+                    onChange={(e) => setTargetMemberId(e.target.value)}
+                  >
+                    {members.map((m) => {
+                      const isSeated = state.seats.some((s) => s.memberId === m.id);
+                      return (
+                        <option key={m.id} value={m.id}>
+                          {m.emoji} {m.name} {isSeated ? '(Masada Oturuyor - Çip Ekle)' : `(Havuz: ${fmt(m.balance)} çip)`}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+              )}
 
               <div className="field">
-                <label>Giriş Çipi</label>
+                <div className="row" style={{ justifyContent: 'space-between', marginBottom: 6 }}>
+                  <label style={{ margin: 0 }}>Giriş Çipi (Yığın)</label>
+                  {!isAddingGuest && (
+                    <span className="muted mono" style={{ fontSize: 12 }}>
+                      Havuz: <strong className="gold">{fmt(members.find((m) => m.id === (targetMemberId || me.id))?.balance ?? me.balance)}</strong> çip
+                    </span>
+                  )}
+                </div>
                 <input
                   type="number"
                   className="input mono"
-                  max={members.find((m) => m.id === (targetMemberId || me.id))?.balance || me.balance}
                   min={settings.bb}
                   value={buyInAmount}
-                  onChange={(e) => setBuyInAmount(Number(e.target.value))}
+                  onChange={(e) => setBuyInAmount(Math.max(1, Number(e.target.value)))}
                   required
-                  autoFocus
                 />
               </div>
 
-              <div className="row" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
+              {/* Hızlı Çip Seçicileri */}
+              <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+                {[settings.startingStack || 200, (settings.startingStack || 200) * 2, 500, 1000].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    className={`btn ${buyInAmount === preset ? 'primary' : 'ghost'}`}
+                    style={{ fontSize: 12, padding: '4px 10px' }}
+                    onClick={() => setBuyInAmount(preset)}
+                  >
+                    {fmt(preset)} Çip
+                  </button>
+                ))}
+              </div>
+
+              {!isAddingGuest && (members.find((m) => m.id === (targetMemberId || me.id))?.balance ?? me.balance) < buyInAmount && (
+                <div style={{ background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.25)', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: '#f59e0b' }}>
+                  💡 Havuzdaki bakiye yetersiz olsa bile eksik çipler masaya oturunca otomatik yüklenecektir.
+                </div>
+              )}
+
+              <div className="row" style={{ justifyContent: 'flex-end', marginTop: 12, gap: 8 }}>
                 <button type="button" className="btn ghost" onClick={() => setShowBuyInModal(false)}>
                   İptal
                 </button>
-                <button type="submit" className="btn primary">
-                  Masaya Oturt & Aktar
+                <button type="submit" className="btn primary big">
+                  Masaya Oturt ({fmt(buyInAmount)} Çip)
                 </button>
               </div>
             </form>

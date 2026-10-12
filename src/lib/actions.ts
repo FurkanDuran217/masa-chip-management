@@ -91,27 +91,57 @@ function pushLog(r: Room, evs: Omit<RoomEvent, 'id' | 'at'>[]) {
 }
 
 /** Havuzdan masaya çip al (yeni koltuk veya mevcut yığına ekleme — sadece el arası) */
-export async function buyIn(groupId: string, room: Room, m: Member, amount: number) {
+export async function buyIn(groupId: string, room: Room, m: Member, amount: number, autoDeposit = true): Promise<Room> {
   const a = Math.floor(amount);
-  if (a <= 0) throw new Error('Geçersiz miktar');
-  if (a > m.balance) throw new Error('Havuzda yeterli çip yok');
+  if (a <= 0) throw new Error('Geçersiz çip miktarı');
+
+  let currentMember = m;
+  if (a > currentMember.balance) {
+    if (autoDeposit) {
+      const deficit = a - currentMember.balance;
+      currentMember = {
+        ...currentMember,
+        balance: currentMember.balance + deficit,
+        deposited: currentMember.deposited + deficit,
+      };
+      await syncSaveMember(groupId, currentMember);
+      await ledger(groupId, currentMember, 'deposit', deficit, room.id, 'Masaya oturmak için otomatik bakiye');
+    } else {
+      throw new Error('Havuzda yeterli çip yok');
+    }
+  }
+
   const r = clone(room);
-  const idx = r.state.seats.findIndex((s) => s.memberId === m.id);
+  const idx = r.state.seats.findIndex((s) => s.memberId === currentMember.id);
   if (idx >= 0) {
-    if (r.state.street !== 'idle' && r.state.seats[idx].inHand) throw new Error('El bitince ekleyebilirsin');
+    if (r.state.street !== 'idle' && r.state.seats[idx].inHand) throw new Error('El devam ederken çip eklenemez');
     r.state.seats[idx].stack += a;
   } else {
     if (r.state.seats.length >= r.settings.maxSeats) throw new Error('Masa dolu');
-    r.state = addSeat(r.state, { memberId: m.id, name: m.name, color: m.color, emoji: m.emoji, stack: a, sittingOut: false });
+    r.state = addSeat(r.state, {
+      memberId: currentMember.id,
+      name: currentMember.name,
+      color: currentMember.color,
+      emoji: currentMember.emoji,
+      stack: a,
+      sittingOut: false,
+    });
   }
-  const row = r.ledger[m.id] ?? { name: m.name, buyIn: 0, cashOut: 0 };
-  r.ledger[m.id] = { ...row, buyIn: row.buyIn + a };
-  pushLog(r, [{ kind: idx >= 0 ? 'rebuy' : 'join', memberId: m.id, name: m.name, amount: a, text: `${m.name} ${idx >= 0 ? 'çip ekledi' : 'masaya oturdu'}: ${a}` }]);
+  const row = r.ledger[currentMember.id] ?? { name: currentMember.name, buyIn: 0, cashOut: 0 };
+  r.ledger[currentMember.id] = { ...row, buyIn: row.buyIn + a };
+  pushLog(r, [{
+    kind: idx >= 0 ? 'rebuy' : 'join',
+    memberId: currentMember.id,
+    name: currentMember.name,
+    amount: a,
+    text: `${currentMember.name} ${idx >= 0 ? 'çip ekledi' : 'masaya oturdu'}: ${a}`,
+  }]);
   r.version++;
-  const next = { ...m, balance: m.balance - a };
+  const next = { ...currentMember, balance: currentMember.balance - a };
   await syncSaveMember(groupId, next);
   await syncSaveRoom(groupId, r);
   await ledger(groupId, next, 'buyin', -a, r.id, r.name);
+  return r;
 }
 
 /** Masadan kalk, yığını havuza geri koy */
@@ -129,16 +159,18 @@ export async function cashOut(groupId: string, room: Room, m: Member) {
   await syncSaveMember(groupId, next);
   await syncSaveRoom(groupId, r);
   await ledger(groupId, next, 'cashout', stack, r.id, r.name);
+  return r;
 }
 
 export async function toggleSitOut(groupId: string, room: Room, seat: number) {
   const r = clone(room);
   const s = r.state.seats[seat];
-  if (!s) return;
+  if (!s) return r;
   if (s.inHand && r.state.street !== 'idle') throw new Error('El bitince');
   s.sittingOut = !s.sittingOut;
   r.version++;
   await syncSaveRoom(groupId, r);
+  return r;
 }
 
 /** Motor aksiyonu uygula, log + undo + el kaydı */
@@ -155,7 +187,7 @@ export async function act(groupId: string, room: Room, action: Action) {
       id: `${r.id}_${res.hand.handNo}_${uid(3)}`, roomId: r.id, roomName: r.name, date: r.date, at: Date.now(), ...res.hand,
     });
   }
-  return res;
+  return { ...res, room: r };
 }
 
 /** Son aksiyonu geri al (el geçmişine yazılmış kayıt silinmez) */
@@ -172,6 +204,7 @@ export async function undo(groupId: string, room: Room) {
   pushLog(r, [{ kind: 'undo', memberId: '', name: '', amount: 0, text: 'Son işlem geri alındı' }]);
   r.version++;
   await syncSaveRoom(groupId, r);
+  return r;
 }
 
 export async function updateRoomSettings(groupId: string, room: Room, settings: RoomSettings) {

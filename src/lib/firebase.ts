@@ -97,6 +97,19 @@ export function isFirebaseConnected(): boolean {
 }
 
 // ---------------- LOCAL STORE YARDIMCILARI ----------------
+// Aynı pencere/sekmedeki dinleyicilere anında bildirim göndermek için yerel EventTarget
+const localBus = typeof window !== 'undefined' ? new EventTarget() : null;
+
+function notifyLocal(key: string) {
+  if (localBus) {
+    try {
+      localBus.dispatchEvent(new CustomEvent('local_sync', { detail: { key } }));
+    } catch (e) {
+      console.error('localBus dispatch error:', e);
+    }
+  }
+}
+
 function localGet<T>(key: string, def: T): T {
   try {
     const raw = localStorage.getItem(LOCAL_DATA_PREFIX + key);
@@ -109,12 +122,51 @@ function localGet<T>(key: string, def: T): T {
 function localSet<T>(key: string, val: T) {
   try {
     localStorage.setItem(LOCAL_DATA_PREFIX + key, JSON.stringify(val));
+    notifyLocal(key);
     if (channel) {
-      channel.postMessage({ type: 'LOCAL_UPDATE', key });
+      try {
+        channel.postMessage({ type: 'LOCAL_UPDATE', key });
+      } catch (e) {
+        console.error('Channel postMessage error:', e);
+      }
     }
   } catch (e) {
     console.error('Local storage error:', e);
   }
+}
+
+function subscribeLocal(key: string, fetch: () => void): () => void {
+  // İlk veri çekimi
+  fetch();
+
+  // 1. Aynı sekme içi anında bildirim
+  const onLocal = (e: Event) => {
+    const custom = e as CustomEvent;
+    if (custom.detail?.key === key || custom.detail?.key === 'all') fetch();
+  };
+  localBus?.addEventListener('local_sync', onLocal);
+
+  // 2. Diğer sekmelerden BroadcastChannel
+  const onMsg = (e: MessageEvent) => {
+    if (e.data?.key === key || e.data?.key === 'all') fetch();
+  };
+  channel?.addEventListener('message', onMsg);
+
+  // 3. Diğer pencerelerden StorageEvent
+  const onStorage = (e: StorageEvent) => {
+    if (e.key === LOCAL_DATA_PREFIX + key) fetch();
+  };
+  if (typeof window !== 'undefined') {
+    window.addEventListener('storage', onStorage);
+  }
+
+  return () => {
+    localBus?.removeEventListener('local_sync', onLocal);
+    channel?.removeEventListener('message', onMsg);
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('storage', onStorage);
+    }
+  };
 }
 
 // ---------------- GRUP İŞLEMLERİ ----------------
@@ -141,17 +193,10 @@ export function syncSubscribeGroup(groupId: string, callback: (g: Group | null) 
       callback(snap.exists() ? (snap.data() as Group) : null);
     });
   }
-  // Local fallback
-  const fetch = () => {
+  return subscribeLocal('groups', () => {
     const groups = localGet<Record<string, Group>>('groups', {});
     callback(groups[groupId] || null);
-  };
-  fetch();
-  const onMsg = (e: MessageEvent) => {
-    if (e.data?.key === 'groups') fetch();
-  };
-  channel?.addEventListener('message', onMsg);
-  return () => channel?.removeEventListener('message', onMsg);
+  });
 }
 
 // ---------------- ÜYELER ----------------
@@ -176,16 +221,10 @@ export function syncSubscribeMembers(groupId: string, callback: (m: Member[]) =>
     });
   }
   const key = `members_${groupId}`;
-  const fetch = () => {
+  return subscribeLocal(key, () => {
     const members = localGet<Record<string, Member>>(key, {});
     callback(Object.values(members));
-  };
-  fetch();
-  const onMsg = (e: MessageEvent) => {
-    if (e.data?.key === key) fetch();
-  };
-  channel?.addEventListener('message', onMsg);
-  return () => channel?.removeEventListener('message', onMsg);
+  });
 }
 
 // ---------------- ODA / MASA (ROOM) ----------------
@@ -201,6 +240,14 @@ export async function syncSaveRoom(groupId: string, room: Room) {
   }
 }
 
+export function syncGetRoom(groupId: string, roomId: string): Room | null {
+  const db = getDb();
+  if (db) return null;
+  const key = `rooms_${groupId}`;
+  const rooms = localGet<Record<string, Room>>(key, {});
+  return rooms[roomId] || null;
+}
+
 export function syncSubscribeRoom(groupId: string, roomId: string, callback: (r: Room | null) => void): () => void {
   const db = getDb();
   if (db) {
@@ -209,16 +256,10 @@ export function syncSubscribeRoom(groupId: string, roomId: string, callback: (r:
     });
   }
   const key = `rooms_${groupId}`;
-  const fetch = () => {
+  return subscribeLocal(key, () => {
     const rooms = localGet<Record<string, Room>>(key, {});
     callback(rooms[roomId] || null);
-  };
-  fetch();
-  const onMsg = (e: MessageEvent) => {
-    if (e.data?.key === key) fetch();
-  };
-  channel?.addEventListener('message', onMsg);
-  return () => channel?.removeEventListener('message', onMsg);
+  });
 }
 
 export function syncSubscribeRooms(groupId: string, callback: (r: Room[]) => void): () => void {
@@ -229,16 +270,10 @@ export function syncSubscribeRooms(groupId: string, callback: (r: Room[]) => voi
     });
   }
   const key = `rooms_${groupId}`;
-  const fetch = () => {
+  return subscribeLocal(key, () => {
     const rooms = localGet<Record<string, Room>>(key, {});
     callback(Object.values(rooms));
-  };
-  fetch();
-  const onMsg = (e: MessageEvent) => {
-    if (e.data?.key === key) fetch();
-  };
-  channel?.addEventListener('message', onMsg);
-  return () => channel?.removeEventListener('message', onMsg);
+  });
 }
 
 // ---------------- EL GEÇMİŞİ (HAND RECORDS) ----------------
@@ -263,15 +298,9 @@ export function syncSubscribeHands(groupId: string, callback: (h: HandRecord[]) 
     });
   }
   const key = `hands_${groupId}`;
-  const fetch = () => {
+  return subscribeLocal(key, () => {
     callback(localGet<HandRecord[]>(key, []));
-  };
-  fetch();
-  const onMsg = (e: MessageEvent) => {
-    if (e.data?.key === key) fetch();
-  };
-  channel?.addEventListener('message', onMsg);
-  return () => channel?.removeEventListener('message', onMsg);
+  });
 }
 
 // ---------------- HAVUZ HAREKETLERİ (LEDGER) ----------------
@@ -296,13 +325,7 @@ export function syncSubscribeLedger(groupId: string, callback: (l: LedgerEntry[]
     });
   }
   const key = `ledger_${groupId}`;
-  const fetch = () => {
+  return subscribeLocal(key, () => {
     callback(localGet<LedgerEntry[]>(key, []));
-  };
-  fetch();
-  const onMsg = (e: MessageEvent) => {
-    if (e.data?.key === key) fetch();
-  };
-  channel?.addEventListener('message', onMsg);
-  return () => channel?.removeEventListener('message', onMsg);
+  });
 }

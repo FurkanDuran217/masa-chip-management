@@ -5,7 +5,7 @@ import { fmt } from '../lib/util';
 import { Plus, Play, Users, ExternalLink } from 'lucide-react';
 
 export const LobbyView: React.FC = () => {
-  const { group, me, rooms, go, run, notify } = useStore();
+  const { group, me, rooms, go, run, notify, addRoomOptimistic } = useStore();
   const [showNewRoom, setShowNewRoom] = useState(false);
   const [roomName, setRoomName] = useState('');
   const [sb, setSb] = useState(group?.defaults.sb || 5);
@@ -25,6 +25,7 @@ export const LobbyView: React.FC = () => {
         startingStack: Number(startingStack) || 200,
         maxSeats: 9,
       });
+      addRoomOptimistic(r);
       setShowNewRoom(false);
       go({ name: 'room', roomId: r.id });
     });

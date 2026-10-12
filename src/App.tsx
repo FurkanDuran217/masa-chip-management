@@ -10,9 +10,22 @@ import { SettingsView } from './components/SettingsView';
 import { Play, BarChart3, Coins, Settings } from 'lucide-react';
 
 export const App: React.FC = () => {
-  const { groupId, group, isGroupUnlocked, me, view, go, toast, joinedGroups, switchGroup, setGroupId } = useStore();
+  const { groupId, group, groupLoaded, isGroupUnlocked, me, view, go, toast, joinedGroups, switchGroup, setGroupId } = useStore();
 
-  // 1. Grup seçili değilse grup oluşturma/katılma ekranı
+  // 1. Grup ID var ama henüz yükleniyorsa spinner göster
+  if (groupId && !groupLoaded) {
+    return (
+      <div className="center-screen">
+        <div className="card" style={{ textAlign: 'center', padding: '40px 24px', maxWidth: 360 }}>
+          <div className="spinner" style={{ margin: '0 auto 16px', width: 36, height: 36 }} />
+          <h3 style={{ margin: '0 0 8px', fontSize: 18 }}>Grup Yükleniyor...</h3>
+          <p className="muted" style={{ margin: 0, fontSize: 13 }}>Grup ve masa verileri senkronize ediliyor</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. Grup seçili değilse veya grup bulunamadıysa grup oluşturma/katılma ekranı
   if (!groupId || !group) {
     return (
       <>
