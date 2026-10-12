@@ -152,12 +152,30 @@ export const RoomView: React.FC<{ roomId: string }> = ({ roomId }) => {
           </div>
         </div>
 
-        {/* Koltuklar */}
-        {state.seats.map((s, idx) => {
-          // Elips koordinatları (rX, rY)
-          const angle = (idx / state.seats.length) * 2 * Math.PI + Math.PI / 2;
-          const left = 50 + 40 * Math.cos(angle);
-          const top = 50 + 36 * Math.sin(angle);
+        {/* Koltuklar (Mevcut oyuncular + boş koltuklar) */}
+        {Array.from({ length: Math.max(state.seats.length, settings.maxSeats || 8) }).map((_, idx) => {
+          const totalSlotCount = Math.max(state.seats.length, settings.maxSeats || 8);
+          const angle = (idx / totalSlotCount) * 2 * Math.PI + Math.PI / 2;
+          const left = 50 + 41 * Math.cos(angle);
+          const top = 50 + 37 * Math.sin(angle);
+
+          const s = state.seats[idx];
+
+          if (!s) {
+            // Boş koltuk
+            return (
+              <div
+                key={`empty_${idx}`}
+                className="seat empty-seat"
+                style={{ left: `${left}%`, top: `${top}%` }}
+                onClick={() => setShowBuyInModal(true)}
+                title="Masaya Otur / Oyuncu Ekle"
+              >
+                <div className="empty-seat-plus">+</div>
+                <div className="nm muted">Boş Koltuk</div>
+              </div>
+            );
+          }
 
           const isTurn = state.turn === idx;
           const isButton = state.button === idx;
@@ -201,18 +219,23 @@ export const RoomView: React.FC<{ roomId: string }> = ({ roomId }) => {
       {/* AKSİYON ÇUBUĞU */}
       <div className="actionbar">
         {state.street === 'idle' ? (
-          <div className="row" style={{ justifyContent: 'space-between', width: '100%' }}>
-            <div className="muted" style={{ fontSize: 14 }}>
-              {state.seats.filter((s) => s.stack > 0).length >= 2
-                ? 'El başlatılmaya hazır.'
-                : 'En az 2 oyuncu gerekli.'}
+          <div className="row" style={{ justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
+            <div className="col" style={{ gap: 2 }}>
+              <div style={{ fontWeight: 700, fontSize: 14 }}>
+                {state.seats.filter((s) => s.stack > 0).length >= 2
+                  ? '🟢 Masa Hazır (Çipli oyuncular var)'
+                  : '🔴 Masada en az 2 oyuncu olmalı'}
+              </div>
+              <div className="muted" style={{ fontSize: 12 }}>
+                {state.seats.length === 0
+                  ? 'Masada kimse yok. Oyuncu ekleyip çip verin.'
+                  : `${state.seats.length} koltuk dolu. Başlatmak için 2+ oyuncu gerekir.`}
+              </div>
             </div>
-            <div className="row">
-              {mySeat && (
-                <button className="btn" onClick={() => setShowBuyInModal(true)}>
-                  Çip Ekle
-                </button>
-              )}
+            <div className="row" style={{ gap: 8 }}>
+              <button className="btn" onClick={() => setShowBuyInModal(true)}>
+                <PlusCircle size={15} /> Oyuncu Ekle / Oturt
+              </button>
               <button
                 className="btn primary big"
                 onClick={handleStart}

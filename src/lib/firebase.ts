@@ -129,6 +129,11 @@ export async function syncSaveGroup(group: Group) {
   }
 }
 
+export function localGetAllGroups(): Group[] {
+  const groups = localGet<Record<string, Group>>('groups', {});
+  return Object.values(groups);
+}
+
 export function syncSubscribeGroup(groupId: string, callback: (g: Group | null) => void): () => void {
   const db = getDb();
   if (db) {

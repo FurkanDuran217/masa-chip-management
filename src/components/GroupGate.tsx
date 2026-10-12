@@ -5,8 +5,8 @@ import { EMOJIS } from '../lib/util';
 import { ArrowRight, Sparkles } from 'lucide-react';
 
 export const GroupGate: React.FC = () => {
-  const { setGroupId, unlockGroup, run } = useStore();
-  const [tab, setTab] = useState<'join' | 'create'>('create');
+  const { joinedGroups, switchGroup, setGroupId, unlockGroup, run } = useStore();
+  const [tab, setTab] = useState<'join' | 'create' | 'my-groups'>(() => joinedGroups.length > 0 ? 'my-groups' : 'create');
 
   // Create form
   const [name, setName] = useState('');
@@ -86,6 +86,16 @@ export const GroupGate: React.FC = () => {
         </div>
 
         <div className="row" style={{ marginBottom: 20, background: 'rgba(0,0,0,0.25)', padding: 4, borderRadius: 12 }}>
+          {joinedGroups.length > 0 && (
+            <button
+              type="button"
+              className={`btn block ${tab === 'my-groups' ? 'primary' : 'ghost'}`}
+              style={{ flex: 1 }}
+              onClick={() => setTab('my-groups')}
+            >
+              Gruplarım ({joinedGroups.length})
+            </button>
+          )}
           <button
             type="button"
             className={`btn block ${tab === 'create' ? 'primary' : 'ghost'}`}
@@ -104,7 +114,40 @@ export const GroupGate: React.FC = () => {
           </button>
         </div>
 
-        {tab === 'create' ? (
+        {tab === 'my-groups' ? (
+          <div className="col">
+            <div className="list" style={{ maxHeight: 320, overflowY: 'auto' }}>
+              {joinedGroups.map((jg) => (
+                <div
+                  key={jg.id}
+                  className="list-item"
+                  style={{ cursor: 'pointer', padding: '10px', borderRadius: 10, background: 'rgba(255,255,255,0.03)', marginBottom: 6 }}
+                  onClick={() => switchGroup(jg.id)}
+                >
+                  <div className="avatar" style={{ background: '#1e293b', fontSize: 22 }}>
+                    {jg.emoji}
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 700, fontSize: 15 }}>{jg.name}</div>
+                    <div className="muted mono" style={{ fontSize: 12 }}>Kod: {jg.id}</div>
+                  </div>
+                  <button type="button" className="btn primary" style={{ fontSize: 13, padding: '6px 12px' }}>
+                    Aç →
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              className="btn block"
+              style={{ marginTop: 12, borderStyle: 'dashed' }}
+              onClick={() => setTab('create')}
+            >
+              <Sparkles size={16} /> Farklı Bir Grup Kur
+            </button>
+          </div>
+        ) : tab === 'create' ? (
           <form onSubmit={handleCreate} className="col">
             <div className="field">
               <label>Grup Adı</label>

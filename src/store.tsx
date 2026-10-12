@@ -12,11 +12,19 @@ const MEMBER_KEY = 'masa_active_member';
 
 export type View = { name: 'lobby' } | { name: 'room'; roomId: string } | { name: 'stats' } | { name: 'pool' } | { name: 'settings' };
 
+export interface SavedGroupMeta {
+  id: string;
+  name: string;
+  emoji: string;
+  lastActive: number;
+}
+
 interface Ctx {
   online: boolean;
   groupId: string | null;
   group: Group | null;
   groupLoaded: boolean;
+  joinedGroups: SavedGroupMeta[];
   members: Member[];
   rooms: Room[];
   hands: HandRecord[];
@@ -26,6 +34,8 @@ interface Ctx {
   toast: string | null;
   isGroupUnlocked: boolean;
   unlockGroup: (id: string) => void;
+  switchGroup: (id: string) => void;
+  leaveGroup: (id: string) => void;
   setGroupId: (id: string | null) => void;
   setMeId: (id: string | null) => void;
   go: (v: View) => void;
@@ -41,6 +51,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const fromUrl = new URLSearchParams(location.search).get('g');
     return fromUrl || localStorage.getItem(GROUP_KEY);
   });
+  const [joinedGroups, setJoinedGroups] = useState<SavedGroupMeta[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('masa_saved_groups_list') || '[]');
+    } catch {
+      return [];
+    }
+  });
   const [unlockedGroups, setUnlockedGroups] = useState<Record<string, boolean>>(() => {
     try {
       return JSON.parse(localStorage.getItem('masa_unlocked_groups') || '{}');
@@ -48,7 +65,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return {};
     }
   });
-  const [meId, setMeIdRaw] = useState<string | null>(() => localStorage.getItem(MEMBER_KEY));
+  const [meId, setMeIdRaw] = useState<string | null>(() => {
+    const initialG = new URLSearchParams(location.search).get('g') || localStorage.getItem(GROUP_KEY);
+    return initialG ? localStorage.getItem(`${MEMBER_KEY}_${initialG}`) || localStorage.getItem(MEMBER_KEY) : null;
+  });
   const [group, setGroup] = useState<Group | null>(null);
   const [groupLoaded, setGroupLoaded] = useState(false);
   const [members, setMembers] = useState<Member[]>([]);
@@ -62,15 +82,41 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [toast, setToast] = useState<string | null>(null);
 
   const setGroupId = (id: string | null) => {
-    if (id) localStorage.setItem(GROUP_KEY, id);
-    else localStorage.removeItem(GROUP_KEY);
-    setMeId(null);
+    if (id) {
+      localStorage.setItem(GROUP_KEY, id);
+      const savedMe = localStorage.getItem(`${MEMBER_KEY}_${id}`);
+      setMeIdRaw(savedMe || null);
+    } else {
+      localStorage.removeItem(GROUP_KEY);
+      setMeIdRaw(null);
+    }
     setGroupIdRaw(id);
+    setView({ name: 'lobby' });
   };
+
   const setMeId = (id: string | null) => {
+    if (groupId) {
+      if (id) localStorage.setItem(`${MEMBER_KEY}_${groupId}`, id);
+      else localStorage.removeItem(`${MEMBER_KEY}_${groupId}`);
+    }
     if (id) localStorage.setItem(MEMBER_KEY, id);
     else localStorage.removeItem(MEMBER_KEY);
     setMeIdRaw(id);
+  };
+
+  const switchGroup = (id: string) => {
+    setGroupId(id);
+  };
+
+  const leaveGroup = (id: string) => {
+    setJoinedGroups((prev) => {
+      const next = prev.filter((g) => g.id !== id);
+      localStorage.setItem('masa_saved_groups_list', JSON.stringify(next));
+      return next;
+    });
+    if (groupId === id) {
+      setGroupId(null);
+    }
   };
 
   useEffect(() => {
@@ -85,6 +131,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       syncSubscribeGroup(groupId, (g) => {
         setGroup(g);
         setGroupLoaded(true);
+        if (g) {
+          setJoinedGroups((prev) => {
+            const exists = prev.some((x) => x.id === g.id);
+            const item = { id: g.id, name: g.name, emoji: g.emoji, lastActive: Date.now() };
+            const next = exists
+              ? prev.map((x) => (x.id === g.id ? item : x))
+              : [item, ...prev];
+            localStorage.setItem('masa_saved_groups_list', JSON.stringify(next));
+            return next;
+          });
+        }
       }),
       syncSubscribeMembers(groupId, (m) => setMembers(m.sort((a, b) => a.createdAt - b.createdAt))),
       syncSubscribeRooms(groupId, (r) => setRooms(r.sort((a, b) => b.createdAt - a.createdAt))),
@@ -131,8 +188,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const isGroupUnlocked = !group?.passwordHash || Boolean(groupId && unlockedGroups[groupId]);
 
   const value: Ctx = {
-    online: isFirebaseConnected(), groupId, group, groupLoaded, members, rooms, hands, ledger, me, view, toast,
-    isGroupUnlocked, unlockGroup,
+    online: isFirebaseConnected(), groupId, group, groupLoaded, joinedGroups, members, rooms, hands, ledger, me, view, toast,
+    isGroupUnlocked, unlockGroup, switchGroup, leaveGroup,
     setGroupId, setMeId, go: setView, notify, run,
   };
   return <C.Provider value={value}>{children}</C.Provider>;

@@ -10,7 +10,7 @@ import { SettingsView } from './components/SettingsView';
 import { Play, BarChart3, Coins, Settings } from 'lucide-react';
 
 export const App: React.FC = () => {
-  const { groupId, group, isGroupUnlocked, me, view, go, toast } = useStore();
+  const { groupId, group, isGroupUnlocked, me, view, go, toast, joinedGroups, switchGroup, setGroupId } = useStore();
 
   // 1. Grup seçili değilse grup oluşturma/katılma ekranı
   if (!groupId || !group) {
@@ -50,8 +50,34 @@ export const App: React.FC = () => {
           <div className="logo">{group.emoji || '♠'}</div>
           <span>{group.name}</span>
         </div>
+
+        {/* Grup Değiştirici */}
+        {joinedGroups.length > 1 && (
+          <select
+            value={group.id}
+            onChange={(e) => switchGroup(e.target.value)}
+            className="input"
+            style={{ width: 'auto', padding: '6px 10px', fontSize: 13, background: 'rgba(255,255,255,0.06)' }}
+            title="Grup Değiştir"
+          >
+            {joinedGroups.map((g) => (
+              <option key={g.id} value={g.id}>
+                {g.emoji} {g.name}
+              </option>
+            ))}
+          </select>
+        )}
+
         <div className="spacer" />
         <div className="row" style={{ gap: 8 }}>
+          <button
+            className="btn ghost icon"
+            onClick={() => setGroupId(null)}
+            title="Gruplarıma / Yeni Gruba Dön"
+            style={{ fontSize: 12, padding: '6px 10px' }}
+          >
+            Gruplar
+          </button>
           <div
             className="avatar"
             style={{ width: 32, height: 32, fontSize: 16, background: me.color, color: '#111' }}
