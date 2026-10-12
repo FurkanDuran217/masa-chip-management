@@ -171,13 +171,19 @@ function subscribeLocal(key: string, fetch: () => void): () => void {
 
 // ---------------- GRUP İŞLEMLERİ ----------------
 export async function syncSaveGroup(group: Group) {
+  // 1. Her zaman yerel depolamaya anında kaydet
+  const groups = localGet<Record<string, Group>>('groups', {});
+  groups[group.id] = group;
+  localSet('groups', groups);
+
+  // 2. Firebase bağlıysa arka planda buluta senkronize et
   const db = getDb();
   if (db) {
-    await setDoc(doc(db, 'groups', group.id), group, { merge: true });
-  } else {
-    const groups = localGet<Record<string, Group>>('groups', {});
-    groups[group.id] = group;
-    localSet('groups', groups);
+    try {
+      await setDoc(doc(db, 'groups', group.id), group, { merge: true });
+    } catch (err) {
+      console.warn('Firestore syncSaveGroup error:', err);
+    }
   }
 }
 
@@ -187,145 +193,305 @@ export function localGetAllGroups(): Group[] {
 }
 
 export function syncSubscribeGroup(groupId: string, callback: (g: Group | null) => void): () => void {
-  const db = getDb();
-  if (db) {
-    return onSnapshot(doc(db, 'groups', groupId), (snap) => {
-      callback(snap.exists() ? (snap.data() as Group) : null);
-    });
-  }
-  return subscribeLocal('groups', () => {
+  // Yerel veriyi anında dinle ve ilet
+  const deliverLocal = () => {
     const groups = localGet<Record<string, Group>>('groups', {});
     callback(groups[groupId] || null);
-  });
+  };
+  const unsubLocal = subscribeLocal('groups', deliverLocal);
+
+  const db = getDb();
+  if (db) {
+    try {
+      const unsubRemote = onSnapshot(
+        doc(db, 'groups', groupId),
+        (snap) => {
+          if (snap.exists()) {
+            const g = snap.data() as Group;
+            const groups = localGet<Record<string, Group>>('groups', {});
+            groups[g.id] = g;
+            localSet('groups', groups);
+            callback(g);
+          }
+        },
+        (err) => {
+          console.warn('Firestore group error, using local:', err);
+          deliverLocal();
+        }
+      );
+      return () => {
+        unsubLocal();
+        unsubRemote();
+      };
+    } catch (e) {
+      console.warn('Firestore subscribeGroup failed:', e);
+    }
+  }
+
+  return unsubLocal;
 }
 
 // ---------------- ÜYELER ----------------
 export async function syncSaveMember(groupId: string, member: Member) {
+  // 1. Her zaman yerel depolamaya anında kaydet
+  const key = `members_${groupId}`;
+  const members = localGet<Record<string, Member>>(key, {});
+  members[member.id] = member;
+  localSet(key, members);
+
+  // 2. Firebase bağlıysa buluta gönder
   const db = getDb();
   if (db) {
-    await setDoc(doc(db, 'groups', groupId, 'members', member.id), member, { merge: true });
-  } else {
-    const key = `members_${groupId}`;
-    const members = localGet<Record<string, Member>>(key, {});
-    members[member.id] = member;
-    localSet(key, members);
+    try {
+      await setDoc(doc(db, 'groups', groupId, 'members', member.id), member, { merge: true });
+    } catch (err) {
+      console.warn('Firestore syncSaveMember error:', err);
+    }
   }
 }
 
 export function syncSubscribeMembers(groupId: string, callback: (m: Member[]) => void): () => void {
-  const db = getDb();
-  if (db) {
-    return onSnapshot(collection(db, 'groups', groupId, 'members'), (snap) => {
-      const list = snap.docs.map((d) => d.data() as Member);
-      callback(list);
-    });
-  }
   const key = `members_${groupId}`;
-  return subscribeLocal(key, () => {
+  const deliverLocal = () => {
     const members = localGet<Record<string, Member>>(key, {});
     callback(Object.values(members));
-  });
+  };
+  const unsubLocal = subscribeLocal(key, deliverLocal);
+
+  const db = getDb();
+  if (db) {
+    try {
+      const unsubRemote = onSnapshot(
+        collection(db, 'groups', groupId, 'members'),
+        (snap) => {
+          if (!snap.empty) {
+            const list = snap.docs.map((d) => d.data() as Member);
+            const map = localGet<Record<string, Member>>(key, {});
+            list.forEach((m) => { map[m.id] = m; });
+            localSet(key, map);
+            callback(list);
+          }
+        },
+        (err) => {
+          console.warn('Firestore members error, using local:', err);
+          deliverLocal();
+        }
+      );
+      return () => {
+        unsubLocal();
+        unsubRemote();
+      };
+    } catch (e) {
+      console.warn('Firestore subscribeMembers failed:', e);
+    }
+  }
+
+  return unsubLocal;
 }
 
 // ---------------- ODA / MASA (ROOM) ----------------
 export async function syncSaveRoom(groupId: string, room: Room) {
+  // 1. HER ZAMAN yerel depolamaya anında kaydet
+  const key = `rooms_${groupId}`;
+  const rooms = localGet<Record<string, Room>>(key, {});
+  rooms[room.id] = room;
+  localSet(key, rooms);
+
+  // 2. Firebase bağlıysa buluta gönder (hata olsa bile yerel çalışmaya devam eder)
   const db = getDb();
   if (db) {
-    await setDoc(doc(db, 'groups', groupId, 'rooms', room.id), room, { merge: true });
-  } else {
-    const key = `rooms_${groupId}`;
-    const rooms = localGet<Record<string, Room>>(key, {});
-    rooms[room.id] = room;
-    localSet(key, rooms);
+    try {
+      await setDoc(doc(db, 'groups', groupId, 'rooms', room.id), room, { merge: true });
+    } catch (err) {
+      console.warn('Firestore syncSaveRoom error (local copy preserved):', err);
+    }
   }
 }
 
 export function syncGetRoom(groupId: string, roomId: string): Room | null {
-  const db = getDb();
-  if (db) return null;
   const key = `rooms_${groupId}`;
   const rooms = localGet<Record<string, Room>>(key, {});
   return rooms[roomId] || null;
 }
 
 export function syncSubscribeRoom(groupId: string, roomId: string, callback: (r: Room | null) => void): () => void {
-  const db = getDb();
-  if (db) {
-    return onSnapshot(doc(db, 'groups', groupId, 'rooms', roomId), (snap) => {
-      callback(snap.exists() ? (snap.data() as Room) : null);
-    });
-  }
   const key = `rooms_${groupId}`;
-  return subscribeLocal(key, () => {
+  const deliverLocal = () => {
     const rooms = localGet<Record<string, Room>>(key, {});
     callback(rooms[roomId] || null);
-  });
+  };
+  const unsubLocal = subscribeLocal(key, deliverLocal);
+
+  const db = getDb();
+  if (db) {
+    try {
+      const unsubRemote = onSnapshot(
+        doc(db, 'groups', groupId, 'rooms', roomId),
+        (snap) => {
+          if (snap.exists()) {
+            const r = snap.data() as Room;
+            const rooms = localGet<Record<string, Room>>(key, {});
+            rooms[r.id] = r;
+            localSet(key, rooms);
+            callback(r);
+          }
+        },
+        (err) => {
+          console.warn('Firestore room error, using local:', err);
+          deliverLocal();
+        }
+      );
+      return () => {
+        unsubLocal();
+        unsubRemote();
+      };
+    } catch (e) {
+      console.warn('Firestore subscribeRoom failed:', e);
+    }
+  }
+
+  return unsubLocal;
 }
 
 export function syncSubscribeRooms(groupId: string, callback: (r: Room[]) => void): () => void {
-  const db = getDb();
-  if (db) {
-    return onSnapshot(collection(db, 'groups', groupId, 'rooms'), (snap) => {
-      callback(snap.docs.map((d) => d.data() as Room));
-    });
-  }
   const key = `rooms_${groupId}`;
-  return subscribeLocal(key, () => {
+  const deliverLocal = () => {
     const rooms = localGet<Record<string, Room>>(key, {});
     callback(Object.values(rooms));
-  });
+  };
+  const unsubLocal = subscribeLocal(key, deliverLocal);
+
+  const db = getDb();
+  if (db) {
+    try {
+      const unsubRemote = onSnapshot(
+        collection(db, 'groups', groupId, 'rooms'),
+        (snap) => {
+          if (!snap.empty) {
+            const list = snap.docs.map((d) => d.data() as Room);
+            const map = localGet<Record<string, Room>>(key, {});
+            list.forEach((r) => { map[r.id] = r; });
+            localSet(key, map);
+            callback(list);
+          }
+        },
+        (err) => {
+          console.warn('Firestore rooms error, using local:', err);
+          deliverLocal();
+        }
+      );
+      return () => {
+        unsubLocal();
+        unsubRemote();
+      };
+    } catch (e) {
+      console.warn('Firestore subscribeRooms failed:', e);
+    }
+  }
+
+  return unsubLocal;
 }
 
 // ---------------- EL GEÇMİŞİ (HAND RECORDS) ----------------
 export async function syncRecordHand(groupId: string, hand: HandRecord) {
+  const key = `hands_${groupId}`;
+  const hands = localGet<HandRecord[]>(key, []);
+  hands.unshift(hand);
+  localSet(key, hands.slice(0, 1000));
+
   const db = getDb();
   if (db) {
-    await setDoc(doc(db, 'groups', groupId, 'hands', hand.id), hand);
-  } else {
-    const key = `hands_${groupId}`;
-    const hands = localGet<HandRecord[]>(key, []);
-    hands.unshift(hand);
-    localSet(key, hands.slice(0, 1000));
+    try {
+      await setDoc(doc(db, 'groups', groupId, 'hands', hand.id), hand);
+    } catch (err) {
+      console.warn('Firestore syncRecordHand error:', err);
+    }
   }
 }
 
 export function syncSubscribeHands(groupId: string, callback: (h: HandRecord[]) => void): () => void {
+  const key = `hands_${groupId}`;
+  const deliverLocal = () => {
+    callback(localGet<HandRecord[]>(key, []));
+  };
+  const unsubLocal = subscribeLocal(key, deliverLocal);
+
   const db = getDb();
   if (db) {
-    const q = query(collection(db, 'groups', groupId, 'hands'), orderBy('at', 'desc'), limit(150));
-    return onSnapshot(q, (snap) => {
-      callback(snap.docs.map((d) => d.data() as HandRecord));
-    });
+    try {
+      const q = query(collection(db, 'groups', groupId, 'hands'), orderBy('at', 'desc'), limit(150));
+      const unsubRemote = onSnapshot(
+        q,
+        (snap) => {
+          if (!snap.empty) {
+            callback(snap.docs.map((d) => d.data() as HandRecord));
+          }
+        },
+        (err) => {
+          console.warn('Firestore hands error, using local:', err);
+          deliverLocal();
+        }
+      );
+      return () => {
+        unsubLocal();
+        unsubRemote();
+      };
+    } catch (e) {
+      console.warn('Firestore subscribeHands failed:', e);
+    }
   }
-  const key = `hands_${groupId}`;
-  return subscribeLocal(key, () => {
-    callback(localGet<HandRecord[]>(key, []));
-  });
+
+  return unsubLocal;
 }
 
 // ---------------- HAVUZ HAREKETLERİ (LEDGER) ----------------
 export async function syncAddLedger(groupId: string, entry: LedgerEntry) {
+  const key = `ledger_${groupId}`;
+  const ledger = localGet<LedgerEntry[]>(key, []);
+  ledger.unshift(entry);
+  localSet(key, ledger.slice(0, 1000));
+
   const db = getDb();
   if (db) {
-    await setDoc(doc(db, 'groups', groupId, 'ledger', entry.id), entry);
-  } else {
-    const key = `ledger_${groupId}`;
-    const ledger = localGet<LedgerEntry[]>(key, []);
-    ledger.unshift(entry);
-    localSet(key, ledger.slice(0, 1000));
+    try {
+      await setDoc(doc(db, 'groups', groupId, 'ledger', entry.id), entry);
+    } catch (err) {
+      console.warn('Firestore syncAddLedger error:', err);
+    }
   }
 }
 
 export function syncSubscribeLedger(groupId: string, callback: (l: LedgerEntry[]) => void): () => void {
+  const key = `ledger_${groupId}`;
+  const deliverLocal = () => {
+    callback(localGet<LedgerEntry[]>(key, []));
+  };
+  const unsubLocal = subscribeLocal(key, deliverLocal);
+
   const db = getDb();
   if (db) {
-    const q = query(collection(db, 'groups', groupId, 'ledger'), orderBy('at', 'desc'), limit(200));
-    return onSnapshot(q, (snap) => {
-      callback(snap.docs.map((d) => d.data() as LedgerEntry));
-    });
+    try {
+      const q = query(collection(db, 'groups', groupId, 'ledger'), orderBy('at', 'desc'), limit(200));
+      const unsubRemote = onSnapshot(
+        q,
+        (snap) => {
+          if (!snap.empty) {
+            callback(snap.docs.map((d) => d.data() as LedgerEntry));
+          }
+        },
+        (err) => {
+          console.warn('Firestore ledger error, using local:', err);
+          deliverLocal();
+        }
+      );
+      return () => {
+        unsubLocal();
+        unsubRemote();
+      };
+    } catch (e) {
+      console.warn('Firestore subscribeLedger failed:', e);
+    }
   }
-  const key = `ledger_${groupId}`;
-  return subscribeLocal(key, () => {
-    callback(localGet<LedgerEntry[]>(key, []));
-  });
+
+  return unsubLocal;
 }

@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useStore } from '../store';
 import { act, buyIn, cashOut, undo, addMember } from '../lib/actions';
+import { syncGetRoom, syncSubscribeRoom } from '../lib/firebase';
+import type { Room } from '../lib/types';
 import { canRaise, minRaiseTo, maxRaiseTo, toCall, potTotal, computePots, STREET_LABEL } from '../lib/engine';
 import { fmt } from '../lib/util';
 import { sound, vibrate } from '../lib/sound';
@@ -8,7 +10,26 @@ import { ArrowLeft, RotateCcw, LogOut, PlusCircle, Check, UserPlus } from 'lucid
 
 export const RoomView: React.FC<{ roomId: string }> = ({ roomId }) => {
   const { group, groupLoaded, me, members, rooms, roomsLoaded, go, run, notify, addRoomOptimistic } = useStore();
-  const room = rooms.find((r) => r.id === roomId);
+
+  // 1. Odayı anında yerel bellekten veya store'dan çek
+  const [liveRoom, setLiveRoom] = useState<Room | null>(() => {
+    return rooms.find((r) => r.id === roomId) || (group ? syncGetRoom(group.id, roomId) : null);
+  });
+
+  // 2. Canlı oda aboneliği
+  useEffect(() => {
+    if (!group) return;
+    const unsub = syncSubscribeRoom(group.id, roomId, (r) => {
+      if (r) {
+        setLiveRoom(r);
+        addRoomOptimistic(r);
+      }
+    });
+    return unsub;
+  }, [group?.id, roomId]);
+
+  // Aktif oda örneği
+  const room = liveRoom || rooms.find((r) => r.id === roomId) || (group ? syncGetRoom(group.id, roomId) : null);
 
   const [raiseVal, setRaiseVal] = useState<number>(0);
   const [showBuyInModal, setShowBuyInModal] = useState(false);
@@ -19,8 +40,8 @@ export const RoomView: React.FC<{ roomId: string }> = ({ roomId }) => {
   const [showResolveModal, setShowResolveModal] = useState(false);
   const [winners, setWinners] = useState<string[][]>([]);
 
-  // 1. Veriler henüz yükleniyorsa spinner göster (asla doğrudan "masa bulunamadı" deme)
-  if (!groupLoaded || !roomsLoaded) {
+  // 1. Oda henüz hafızada yoksa ve genel veriler yükleniyorsa spinner göster
+  if (!room && (!groupLoaded || !roomsLoaded)) {
     return (
       <div className="center-screen">
         <div className="card" style={{ textAlign: 'center', padding: '40px 24px', maxWidth: 360 }}>
@@ -32,7 +53,7 @@ export const RoomView: React.FC<{ roomId: string }> = ({ roomId }) => {
     );
   }
 
-  // 2. Yüklendi ve oda gerçekten yoksa
+  // 2. Yüklendi ve oda gerçekten hiçbir yerde yoksa
   if (!group || !room || !me) {
     return (
       <div className="center-screen">
