@@ -1,5 +1,8 @@
 # Masa · Çip Yönetimi
 
+> **Not:** Proje v2 (grup + çok cihaz + istatistik) yeniden yazımının ortasında.
+> Aşağıdaki belge v1'i anlatıyor. Güncel durum ve yapılacaklar için [DURUM.md](./DURUM.md).
+
 Masa başı poker oynarken **çip sayma derdini bitiren** uygulama. Oyun kuralları yok, kart yok,
 flop yok — sadece oda kurma, çip koyma, all-in, pot dağıtma ve bakiye takibi.
 
