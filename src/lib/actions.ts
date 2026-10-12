@@ -19,13 +19,36 @@ async function ledger(groupId: string, m: Member, type: LedgerType, amount: numb
 }
 
 // ---------- grup ----------
-export async function createGroup(p: { name: string; emoji: string; startingBalance: number; defaults: GroupDefaults; chipValue?: number; currency?: string }, by: string): Promise<Group> {
+export async function createGroup(p: {
+  name: string;
+  emoji: string;
+  startingBalance: number;
+  defaults: GroupDefaults;
+  chipValue?: number;
+  chipsPerCurrency?: number;
+  currency?: string;
+  password?: string;
+}, by: string): Promise<Group> {
   const g: Group = {
-    id: uid(6), name: p.name.trim() || 'Masa', emoji: p.emoji || '♠️', createdAt: Date.now(), createdBy: by,
-    startingBalance: Math.max(0, Math.floor(p.startingBalance)), chipValue: p.chipValue ?? 0, currency: p.currency ?? '₺', defaults: p.defaults,
+    id: uid(6),
+    name: p.name.trim() || 'Masa',
+    emoji: p.emoji || '♠️',
+    createdAt: Date.now(),
+    createdBy: by,
+    startingBalance: Math.max(0, Math.floor(p.startingBalance)),
+    chipValue: p.chipValue ?? 0,
+    chipsPerCurrency: p.chipsPerCurrency ?? 0,
+    currency: p.currency ?? '₺',
+    defaults: p.defaults,
+    passwordHash: p.password ? await hashPin(p.password) : undefined,
   };
   await syncSaveGroup(g);
   return g;
+}
+
+export async function verifyGroupPassword(g: Group, inputPassword: string): Promise<boolean> {
+  if (!g.passwordHash) return true;
+  return (await hashPin(inputPassword)) === g.passwordHash;
 }
 
 export async function addMember(g: Group, name: string, pin: string, existing: Member[]): Promise<Member> {

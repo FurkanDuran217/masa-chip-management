@@ -27,8 +27,12 @@ export interface Group {
   startingBalance: number;
   /** Opsiyonel: 1 çip = kaç para (0 = kapalı) */
   chipValue: number;
+  /** Opsiyonel: 1 TL / Para birimi = kaç çip (ters oran hesabı için) */
+  chipsPerCurrency?: number;
   currency: string;
   defaults: GroupDefaults;
+  /** Gruba giriş şifresi (SHA-256 hash) */
+  passwordHash?: string;
 }
 
 export interface Member {

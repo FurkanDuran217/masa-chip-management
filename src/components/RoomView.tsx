@@ -7,12 +7,13 @@ import { sound, vibrate } from '../lib/sound';
 import { ArrowLeft, RotateCcw, LogOut, PlusCircle, Check } from 'lucide-react';
 
 export const RoomView: React.FC<{ roomId: string }> = ({ roomId }) => {
-  const { group, me, rooms, go, run } = useStore();
+  const { group, me, members, rooms, go, run, notify } = useStore();
   const room = rooms.find((r) => r.id === roomId);
 
   const [raiseVal, setRaiseVal] = useState<number>(0);
   const [showBuyInModal, setShowBuyInModal] = useState(false);
   const [buyInAmount, setBuyInAmount] = useState<number>(200);
+  const [targetMemberId, setTargetMemberId] = useState<string>('');
   const [showResolveModal, setShowResolveModal] = useState(false);
   const [winners, setWinners] = useState<string[][]>([]);
 
@@ -61,6 +62,11 @@ export const RoomView: React.FC<{ roomId: string }> = ({ roomId }) => {
   };
 
   const handleStart = async () => {
+    const readyPlayers = state.seats.filter((s) => s.stack > 0);
+    if (readyPlayers.length < 2) {
+      notify('Eli başlatmak için masada çipi olan en az 2 oyuncu olması gerekir. "Masaya Otur" ile diğer oyuncuları ekleyin.');
+      return;
+    }
     await run(async () => {
       sound.chip();
       await act(group.id, room, { type: 'start' });
@@ -69,8 +75,9 @@ export const RoomView: React.FC<{ roomId: string }> = ({ roomId }) => {
 
   const handleBuyInSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const target = members.find((m) => m.id === (targetMemberId || me.id)) || me;
     await run(async () => {
-      await buyIn(group.id, room, me, Number(buyInAmount));
+      await buyIn(group.id, room, target, Number(buyInAmount));
       setShowBuyInModal(false);
     });
   };
@@ -308,17 +315,29 @@ export const RoomView: React.FC<{ roomId: string }> = ({ roomId }) => {
       {showBuyInModal && (
         <div className="backdrop" onClick={() => setShowBuyInModal(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2>Masaya Çip Getir</h2>
-            <p className="muted" style={{ fontSize: 14, margin: '0 0 16px' }}>
-              Havuz bakiyeniz: <strong className="gold mono">{fmt(me.balance)}</strong> çip
-            </p>
+            <h2>Masaya Oyuncu / Çip Ekle</h2>
             <form onSubmit={handleBuyInSubmit} className="col">
+              <div className="field">
+                <label>Oyuncu Seç</label>
+                <select
+                  className="input"
+                  value={targetMemberId || me.id}
+                  onChange={(e) => setTargetMemberId(e.target.value)}
+                >
+                  {members.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.emoji} {m.name} (Havuz: {fmt(m.balance)} çip)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div className="field">
                 <label>Giriş Çipi</label>
                 <input
                   type="number"
                   className="input mono"
-                  max={me.balance}
+                  max={members.find((m) => m.id === (targetMemberId || me.id))?.balance || me.balance}
                   min={settings.bb}
                   value={buyInAmount}
                   onChange={(e) => setBuyInAmount(Number(e.target.value))}
@@ -326,12 +345,13 @@ export const RoomView: React.FC<{ roomId: string }> = ({ roomId }) => {
                   autoFocus
                 />
               </div>
+
               <div className="row" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
                 <button type="button" className="btn ghost" onClick={() => setShowBuyInModal(false)}>
                   İptal
                 </button>
                 <button type="submit" className="btn primary">
-                  Masaya Aktar
+                  Masaya Oturt & Aktar
                 </button>
               </div>
             </form>

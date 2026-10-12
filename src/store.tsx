@@ -24,6 +24,8 @@ interface Ctx {
   me: Member | null;
   view: View;
   toast: string | null;
+  isGroupUnlocked: boolean;
+  unlockGroup: (id: string) => void;
   setGroupId: (id: string | null) => void;
   setMeId: (id: string | null) => void;
   go: (v: View) => void;
@@ -38,6 +40,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [groupId, setGroupIdRaw] = useState<string | null>(() => {
     const fromUrl = new URLSearchParams(location.search).get('g');
     return fromUrl || localStorage.getItem(GROUP_KEY);
+  });
+  const [unlockedGroups, setUnlockedGroups] = useState<Record<string, boolean>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('masa_unlocked_groups') || '{}');
+    } catch {
+      return {};
+    }
   });
   const [meId, setMeIdRaw] = useState<string | null>(() => localStorage.getItem(MEMBER_KEY));
   const [group, setGroup] = useState<Group | null>(null);
@@ -111,8 +120,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const me = useMemo(() => members.find((m) => m.id === meId) ?? null, [members, meId]);
 
+  const unlockGroup = (id: string) => {
+    setUnlockedGroups((prev) => {
+      const next = { ...prev, [id]: true };
+      localStorage.setItem('masa_unlocked_groups', JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const isGroupUnlocked = !group?.passwordHash || Boolean(groupId && unlockedGroups[groupId]);
+
   const value: Ctx = {
     online: isFirebaseConnected(), groupId, group, groupLoaded, members, rooms, hands, ledger, me, view, toast,
+    isGroupUnlocked, unlockGroup,
     setGroupId, setMeId, go: setView, notify, run,
   };
   return <C.Provider value={value}>{children}</C.Provider>;

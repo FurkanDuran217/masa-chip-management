@@ -1,6 +1,6 @@
-import React from 'react';
 import { useStore } from './store';
 import { GroupGate } from './components/GroupGate';
+import { GroupLockGate } from './components/GroupLockGate';
 import { MemberGate } from './components/MemberGate';
 import { LobbyView } from './components/LobbyView';
 import { RoomView } from './components/RoomView';
@@ -10,13 +10,23 @@ import { SettingsView } from './components/SettingsView';
 import { Play, BarChart3, Coins, Settings } from 'lucide-react';
 
 export const App: React.FC = () => {
-  const { groupId, group, me, view, go, toast } = useStore();
+  const { groupId, group, isGroupUnlocked, me, view, go, toast } = useStore();
 
   // 1. Grup seçili değilse grup oluşturma/katılma ekranı
   if (!groupId || !group) {
     return (
       <>
         <GroupGate />
+        {toast && <div className="toast">{toast}</div>}
+      </>
+    );
+  }
+
+  // 2. Grup şifreliyse ve bu cihazda henüz açılmadıysa şifre sor
+  if (!isGroupUnlocked) {
+    return (
+      <>
+        <GroupLockGate />
         {toast && <div className="toast">{toast}</div>}
       </>
     );
