@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useStore } from '../store';
-import { loadSavedFirebaseConfig, saveFirebaseConfig, isFirebaseConnected } from '../lib/firebase';
+import { loadSavedFirebaseConfig, saveFirebaseConfig } from '../lib/firebase';
 import { Save, LogOut, Database, Volume2, VolumeX } from 'lucide-react';
 import { sound } from '../lib/sound';
 
@@ -77,9 +77,8 @@ export const SettingsView: React.FC = () => {
           <h3 style={{ fontSize: 16, margin: 0 }}>Firebase Bulut Senkronu</h3>
         </div>
         <p className="muted" style={{ fontSize: 13, margin: '0 0 16px' }}>
-          {isFirebaseConnected()
-            ? '✅ Firebase bağlı. Tüm cihazlar (telefonlar, bilgisayarlar) gerçek zamanlı senkronize çalışıyor.'
-            : '⚠️ Şu an yerel moddasınız (Aynı tarayıcı ve sekmeler arası senkron). Arkadaşlarınızla farklı cihazlardan oynamak için Firebase config girin.'}
+          🟢 <strong>Canlı Bulut Senkronu devrede:</strong> Tüm cihazlar (telefonlar, bilgisayarlar) hesap veya anahtar gerekmeden otomatik senkronize çalışır.
+          İsteğe bağlı olarak kalıcı bulut depolama için kendi Firebase projenizi de bağlayabilirsiniz.
         </p>
 
         <form onSubmit={handleSaveFirebase} className="col">

@@ -16,16 +16,41 @@ export const App: React.FC = () => {
   if (groupId && !groupLoaded) {
     return (
       <div className="center-screen">
-        <div className="card" style={{ textAlign: 'center', padding: '40px 24px', maxWidth: 360 }}>
+        <div className="card" style={{ textAlign: 'center', padding: '40px 24px', maxWidth: 380 }}>
           <div className="spinner" style={{ margin: '0 auto 16px', width: 36, height: 36 }} />
-          <h3 style={{ margin: '0 0 8px', fontSize: 18 }}>Grup Yükleniyor...</h3>
-          <p className="muted" style={{ margin: 0, fontSize: 13 }}>Grup ve masa verileri senkronize ediliyor</p>
+          <h3 style={{ margin: '0 0 8px', fontSize: 18 }}>Gruba Bağlanılıyor...</h3>
+          <p className="muted" style={{ margin: 0, fontSize: 13 }}>
+            Grup ve masa verileri senkronize ediliyor (Kod: <strong className="mono gold">{groupId}</strong>)
+          </p>
         </div>
       </div>
     );
   }
 
-  // 2. Grup seçili değilse veya grup bulunamadıysa grup oluşturma/katılma ekranı
+  // 2. Grup ID girilmiş ama bulunamadıysa net hata ve geri dönüş ekranı
+  if (groupId && groupLoaded && !group) {
+    return (
+      <div className="center-screen">
+        <div className="card" style={{ textAlign: 'center', padding: '36px 20px', maxWidth: 400 }}>
+          <div style={{ fontSize: 36, marginBottom: 12 }}>⚠️</div>
+          <h3 style={{ margin: '0 0 8px', fontSize: 18 }}>Grup Bulunamadı</h3>
+          <p className="muted" style={{ margin: '0 0 20px', fontSize: 14 }}>
+            `<span className="mono gold">{groupId}</span>` kodlu grup bulunamadı veya henüz senkronize edilmedi.
+          </p>
+          <div className="col" style={{ gap: 8 }}>
+            <button className="btn primary block" onClick={() => window.location.reload()}>
+              Tekrar Dene
+            </button>
+            <button className="btn ghost block" onClick={() => setGroupId(null)}>
+              Farklı Gruba Katıl / Yeni Grup Kur
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 3. Grup seçili değilse grup oluşturma/katılma ekranı
   if (!groupId || !group) {
     return (
       <>

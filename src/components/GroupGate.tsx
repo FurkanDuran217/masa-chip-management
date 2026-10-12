@@ -6,7 +6,11 @@ import { ArrowRight, Sparkles } from 'lucide-react';
 
 export const GroupGate: React.FC = () => {
   const { joinedGroups, switchGroup, setGroupId, unlockGroup, run } = useStore();
-  const [tab, setTab] = useState<'join' | 'create' | 'my-groups'>(() => joinedGroups.length > 0 ? 'my-groups' : 'create');
+  const urlParamG = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('g') : null;
+  const [tab, setTab] = useState<'join' | 'create' | 'my-groups'>(() => {
+    if (urlParamG) return 'join';
+    return joinedGroups.length > 0 ? 'my-groups' : 'create';
+  });
 
   // Create form
   const [name, setName] = useState('');
@@ -24,7 +28,7 @@ export const GroupGate: React.FC = () => {
   const [chipsPerCurrency, setChipsPerCurrency] = useState('10'); // 1 TL = ... çip
 
   // Join form
-  const [joinId, setJoinId] = useState('');
+  const [joinId, setJoinId] = useState(() => urlParamG || '');
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,9 +71,20 @@ export const GroupGate: React.FC = () => {
 
   const handleJoin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (joinId.trim()) {
-      setGroupId(joinId.trim());
+    let code = joinId.trim();
+    if (!code) return;
+    // Eğer kullanıcı tam URL yapıştırdıysa (?g= parametresini ayıkla)
+    if (code.includes('?g=') || code.includes('&g=')) {
+      try {
+        const u = new URL(code.startsWith('http') ? code : `https://${code}`);
+        const param = u.searchParams.get('g');
+        if (param) code = param;
+      } catch {
+        const match = code.match(/[?&]g=([a-zA-Z0-9_-]+)/);
+        if (match) code = match[1];
+      }
     }
+    setGroupId(code);
   };
 
   return (

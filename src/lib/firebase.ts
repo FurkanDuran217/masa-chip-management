@@ -16,6 +16,7 @@ import {
   type Firestore,
 } from 'firebase/firestore';
 import type { Group, Member, Room, HandRecord, LedgerEntry } from './types';
+import { cloudPublish, cloudSubscribe, isCloudRelayConnected } from './cloudSync';
 
 export interface FirebaseConfig {
   apiKey: string;
@@ -96,6 +97,10 @@ export function isFirebaseConnected(): boolean {
   return getDb() !== null;
 }
 
+export function isRealtimeConnected(): boolean {
+  return isCloudRelayConnected() || isFirebaseConnected();
+}
+
 // ---------------- LOCAL STORE YARDIMCILARI ----------------
 // Aynı pencere/sekmedeki dinleyicilere anında bildirim göndermek için yerel EventTarget
 const localBus = typeof window !== 'undefined' ? new EventTarget() : null;
@@ -119,7 +124,7 @@ function localGet<T>(key: string, def: T): T {
   }
 }
 
-function localSet<T>(key: string, val: T) {
+function localSet<T>(key: string, val: T, broadcastToCloud = true) {
   try {
     localStorage.setItem(LOCAL_DATA_PREFIX + key, JSON.stringify(val));
     notifyLocal(key);
@@ -129,6 +134,10 @@ function localSet<T>(key: string, val: T) {
       } catch (e) {
         console.error('Channel postMessage error:', e);
       }
+    }
+    // Cihazlar arası canlı bulut senkronizasyonu
+    if (broadcastToCloud) {
+      cloudPublish(key, val);
     }
   } catch (e) {
     console.error('Local storage error:', e);
@@ -160,12 +169,38 @@ function subscribeLocal(key: string, fetch: () => void): () => void {
     window.addEventListener('storage', onStorage);
   }
 
+  // 4. Cihazlar arası gerçek zamanlı bulut senkronu (MQTT over WebSockets)
+  const unsubCloud = cloudSubscribe(key, (incomingData) => {
+    if (!incomingData) return;
+    try {
+      if (Array.isArray(incomingData)) {
+        // Liste tipi veriler (el geçmişi, ledger): ID bazında birleştir ve tarihe göre sırala
+        const current = localGet<any[]>(key, []);
+        const idMap = new Map<string, any>();
+        [...current, ...incomingData].forEach((item) => {
+          if (item?.id) idMap.set(item.id, item);
+        });
+        const merged = Array.from(idMap.values()).sort((a, b) => (b.at || 0) - (a.at || 0));
+        localSet(key, merged, false);
+      } else if (typeof incomingData === 'object') {
+        // Nesne tipi veriler (gruplar, odalar, üyeler): birleştir
+        const current = localGet<Record<string, any>>(key, {});
+        const merged = { ...current, ...incomingData };
+        localSet(key, merged, false);
+      }
+      fetch();
+    } catch (e) {
+      console.warn('Incoming cloud data merge error:', e);
+    }
+  });
+
   return () => {
     localBus?.removeEventListener('local_sync', onLocal);
     channel?.removeEventListener('message', onMsg);
     if (typeof window !== 'undefined') {
       window.removeEventListener('storage', onStorage);
     }
+    unsubCloud();
   };
 }
 

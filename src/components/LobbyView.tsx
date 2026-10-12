@@ -32,8 +32,13 @@ export const LobbyView: React.FC = () => {
   };
 
   const copyInvite = () => {
-    navigator.clipboard.writeText(window.location.origin + window.location.pathname + `?g=${group.id}`);
-    notify('Davet linki panoya kopyalandı!');
+    const inviteUrl = window.location.origin + window.location.pathname + `?g=${group.id}`;
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(inviteUrl);
+      notify(`Davet linki panoya kopyalandı! (Grup Kodu: ${group.id})`);
+    } else {
+      prompt('Davet linkini kopyalayın:', inviteUrl);
+    }
   };
 
   const openRooms = rooms.filter((r) => r.status === 'open');
@@ -50,11 +55,11 @@ export const LobbyView: React.FC = () => {
             <div>
               <div style={{ fontWeight: 800, fontSize: 17 }}>{me.name}</div>
               <div className="muted" style={{ fontSize: 13 }}>
-                Havuzdaki Bakiyen: <strong className="gold mono">{fmt(me.balance)}</strong> çip
+                Havuz Bakiyen: <strong className="gold mono">{fmt(me.balance)}</strong> çip · Kod: <strong className="mono gold" style={{ userSelect: 'all' }}>{group.id}</strong>
               </div>
             </div>
           </div>
-          <button className="btn ghost" onClick={copyInvite} style={{ fontSize: 13 }}>
+          <button className="btn ghost" onClick={copyInvite} style={{ fontSize: 13 }} title="Bağlantıyı kopyala">
             <ExternalLink size={14} /> Davet Linki
           </button>
         </div>

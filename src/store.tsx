@@ -136,11 +136,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setHands([]);
     setLedger([]);
     if (!groupId) return;
+    let timeoutTimer: number | undefined;
     const offs = [
       syncSubscribeGroup(groupId, (g) => {
-        setGroup(g);
-        setGroupLoaded(true);
         if (g) {
+          setGroup(g);
+          setGroupLoaded(true);
+          if (timeoutTimer) window.clearTimeout(timeoutTimer);
           setJoinedGroups((prev) => {
             const exists = prev.some((x) => x.id === g.id);
             const item = { id: g.id, name: g.name, emoji: g.emoji, lastActive: Date.now() };
@@ -160,7 +162,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       syncSubscribeHands(groupId, setHands),
       syncSubscribeLedger(groupId, setLedger),
     ];
-    return () => offs.forEach((f) => f());
+
+    // Bulut senkronizasyonu için bekleme payı ver; grup bulunamazsa loaded=true yap
+    timeoutTimer = window.setTimeout(() => {
+      setGroupLoaded(true);
+    }, 3500);
+
+    return () => {
+      if (timeoutTimer) window.clearTimeout(timeoutTimer);
+      offs.forEach((f) => f());
+    };
   }, [groupId]);
 
   // URL'yi görünümle senkron tut (paylaşılabilir link)
