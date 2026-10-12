@@ -6,3 +6,8 @@
 - Her önemli iş adımından sonra `DURUM.md` dosyasını güncelle (ne yapıldı, nerede kalındı, sıradaki adımlar).
 - İş bitince değişiklikleri anlamlı bir mesajla commit edip `origin`'e push et.
 - Yanıtları Türkçe ve kısa yaz.
+
+## Kota / yarıda kalma güvenliği
+- İşi küçük, kendi başına derlenebilen adımlara böl. Her adım bitince commit + push yap.
+- Bir adıma başlamadan önce `DURUM.md` > "Şu anki adım" bölümüne ne yapılacağını yaz; bitince işaretle.
+- Yeni bir oturum `DURUM.md`'yi okuyarak kaldığı yerden devam edebilmeli.

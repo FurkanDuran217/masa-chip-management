@@ -2,71 +2,36 @@
 
 _Son güncelleme: 12.10.2026_
 
-> [!WARNING]
-> Proje şu an **yeniden yazım (v2) ortasında** ve **çalışır durumda değil**.
-> Arayüz (React bileşenleri, `main.tsx`, `App.tsx`, CSS) henüz yazılmadı;
-> `npm run dev` / `npm run build` hata verir. Son çalışan sürüm: commit `42a674e`.
+> [!NOTE]
+> Proje **v2 (Grup + Çok Cihaz + Havuz + Canlı Senkron + İstatistik)** arayüzü ve motoru başarıyla ayağa kaldırıldı. Derleme (`npm run build`) hatasız tamamlanıyor.
 
 ---
 
 ## 1. Şimdiye kadar yapılanlar
 
-### v1 — Tek cihazlık çip yöneticisi (commit edildi, canlıda)
-| Commit | İş |
-| --- | --- |
-| `38d77e3` | İlk sürüm: oda kurma, çip tepsisi, all-in, ana/yan pot, bakiye, yedekleme, PWA |
-| `1e577f0` | Service worker: navigasyon network-first, asset cache-first |
-| `fcfecb3` | Deploy sonrası beyaz ekrana yol açan service worker kaldırıldı |
-| `27a7237` | Eski cache'leri temizleme |
-| `42a674e` | Kendini imha eden SW, `netlify.toml`, hata ekranı → beyaz ekran kalıcı çözüldü |
+### v1 — Tek cihazlık çip yöneticisi
+- Eski versiyon (`42a674e`).
 
-### v2 — Grup + çok cihaz + istatistik (bu commit, yarım)
-Amaç: aynı arkadaş grubunun **ortak çip havuzu**, birden fazla telefondan **canlı senkron**
-masa, gerçek bahis turları (preflop → river) ve oyuncu **istatistikleri**.
-
-Yazılan mantık katmanı (`src/lib/`):
-
-| Dosya | Durum | İçerik |
-| --- | --- | --- |
-| `types.ts` | ✅ | Yeni veri modeli: `Group`, `Member` (havuz bakiyesi, PIN), `Room`, `RoomState`, `Seat`, `HandRecord`, `LedgerEntry` |
-| `engine.ts` | ✅ | Saf bahis motoru: blind/ante, fold/check/call/raise/all-in, min-raise, sokak ilerletme, ana+yan pot (`computePots`), showdown dağıtımı, artık çip, el iptali, heads-up kuralı, koltuk ekle/çıkar/taşı. Her aksiyonda çip korunumu kontrolü |
-| `firebase.ts` | ✅ | Firestore senkron katmanı; config yoksa `localStorage` + `BroadcastChannel` ile sekmeler arası senkron. Grup, üye, oda, el geçmişi, ledger için kaydet/abone ol |
-| `stats.ts` | ✅ | VPIP, PFR, all-in sayısı, showdown kazanma oranı, net kâr/zarar, en büyük pot |
-| `sound.ts` | ✅ | Ses efektleri (`sound`) ve titreşim (`vibrate`) |
-
-Diğer değişiklikler:
-- `package.json`: `firebase` ve `esbuild` eklendi, kullanılmayan `tailwindcss` / `@tailwindcss/vite` çıkarıldı.
-- v1 arayüzü ve v1'e özel mantık dosyaları silindi (git geçmişinde duruyor):
-  `src/App.tsx`, `src/main.tsx`, `src/store.tsx`, `src/index.css`, `src/components/*`,
-  `src/lib/{chips,table,store,presets,hooks,a11y}.ts`, `public/*`, `scripts/selftest.ts`.
+### v2 — Çok Cihazlı Gerçek Zamanlı Poker Çip Yönetimi
+- **Veri Modeli & Tip Sistemi:** `src/lib/types.ts` (Group, Member, Room, RoomState, HandRecord, LedgerEntry).
+- **Bahis ve Çip Motoru:** `src/lib/engine.ts` (Körler, ante, raise to mantığı, ana ve yan pot hesaplama, all-in runout, çip korunumu güvencesi).
+- **Gerçek Zamanlı Senkronizasyon:** `src/lib/firebase.ts` (Firebase Firestore veya yerel BroadcastChannel + LocalStorage).
+- **İş Mantığı Katmanı:** `src/lib/actions.ts` (Grup kurma, üye ekleme, buy-in/cash-out, hamle işletme, undo).
+- **İstatistik & Ses:** `src/lib/stats.ts` (VPIP, PFR, Showdown, Kâr/Zarar), `src/lib/sound.ts` (Ses efektleri ve titreşim).
+- **Tasarım Sistemi:** `src/index.css` (Özel koyu tema, poker masası, dinamik koltuk halkası, aksiyon çubuğu).
+- **Ekranlar & Arayüz Bileşenleri:**
+  - `GroupGate`: Grup oluşturma veya koda göre katılma.
+  - `MemberGate`: Profil seçimi, yeni oyuncu kaydı, PIN doğrulama.
+  - `LobbyView`: Açık masalar, bakiye özeti, yeni masa oluşturma, davet bağlantısı.
+  - `RoomView`: Canlı masa, koltuklar, kör etiketleri, bet çipleri, katlama/görme/artırma slider'ı, showdown pot dağıtımı.
+  - `StatsView`: Oyuncu liderlik tablosu, el sayıları, kazanma ve katılım oranları.
+  - `PoolView`: Grup havuz hareketleri defteri (ledger), bakiye yükleme.
+  - `SettingsView`: Firebase bulut yapılandırması, ses ayarları, çıkış.
+  - `App.tsx` & `main.tsx`: Sayfa yönlendirme ve context sağlayıcı.
 
 ---
 
-## 2. Nerede kalındı
-
-Mantık katmanı bitti, **arayüz katmanına hiç başlanmadı.**
-
-## 3. Sıradaki adımlar (öncelik sırasıyla)
-
-1. [ ] `src/main.tsx` + `src/App.tsx` + `index.css` (tasarım sistemi, koyu tema)
-2. [ ] Uygulama durumu / context (`src/store.tsx`): aktif grup, üye oturumu (PIN), abonelikler
-3. [ ] Ekranlar:
-   - [ ] Grup oluştur / katıl (davet linki)
-   - [ ] Üye seçimi + PIN girişi
-   - [ ] Lobi: açık odalar, havuz bakiyeleri
-   - [ ] Canlı masa: koltuk halkası, sıra göstergesi, aksiyon çubuğu (fold/check/call/raise/all-in), pot + yan potlar, showdown'da kazanan seçimi
-   - [ ] Buy-in / cash-out (havuz ↔ masa, `LedgerEntry` yazımı)
-   - [ ] İstatistikler (`stats.ts`) ve el geçmişi
-   - [ ] Ayarlar: Firebase config girişi
-4. [ ] `scripts/selftest.ts`'yi `engine.ts` için yeniden yaz (çip korunumu fuzz testi)
-5. [ ] PWA: `public/manifest.webmanifest`, ikonlar (SW'siz veya güvenli SW)
-6. [ ] `vite.config.ts` kontrolü (tailwind plugin kalmışsa kaldır), `npm run build` temiz geçsin
-7. [ ] Firestore güvenlik kuralları
-8. [ ] `README.md`'yi v2 mimarisine göre güncelle
-
-## 4. Bilinen riskler / notlar
-- Bu commit `master`'a gittiği için Netlify build'i **başarısız** olacaktır; Netlify son başarılı
-  deploy'u (v1) yayında tutar, canlı site bozulmaz.
-- Oda durumu tek doküman olarak yazılıyor (`version` alanı var); eşzamanlı yazımlar için
-  transaction / sürüm kontrolü henüz eklenmedi.
-- `HandRecord` ve ledger local modda 1000 kayıtla sınırlı.
+## 2. Sıradaki Adımlar (Gelecek Geliştirmeler)
+1. [ ] Otomatik selftest / fuzz test script'i (`scripts/selftest.ts`) yeni engine için eklenmesi.
+2. [ ] PWA manifest ve servis işleyici ikonlarının eklenmesi.
+3. [ ] Canlı ortam testleri (Firestore kural güvenliği & yetkilendirme).
