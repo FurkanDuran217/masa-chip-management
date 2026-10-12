@@ -130,13 +130,12 @@ export const RoomView: React.FC<{ roomId: string }> = ({ roomId }) => {
               <RotateCcw size={16} />
             </button>
           )}
-          {mySeat ? (
+          <button className="btn" style={{ fontSize: 13, padding: '6px 12px' }} onClick={() => setShowBuyInModal(true)}>
+            <PlusCircle size={14} /> {mySeat ? 'Oyuncu / Çip Ekle' : 'Masaya Otur'}
+          </button>
+          {mySeat && (
             <button className="btn danger" style={{ fontSize: 13, padding: '6px 12px' }} onClick={handleCashOut}>
               <LogOut size={14} /> Masadan Kalk
-            </button>
-          ) : (
-            <button className="btn primary" style={{ fontSize: 13, padding: '6px 12px' }} onClick={() => setShowBuyInModal(true)}>
-              <PlusCircle size={14} /> Masaya Otur
             </button>
           )}
         </div>

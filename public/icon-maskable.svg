@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <radialGradient id="bg-mask" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#141e2a"/>
+      <stop offset="100%" stop-color="#070b10"/>
+    </radialGradient>
+    <linearGradient id="gold-mask" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffd56b"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="512" height="512" fill="url(#bg-mask)"/>
+  <circle cx="256" cy="256" r="140" fill="#0d141c" stroke="url(#gold-mask)" stroke-width="8"/>
+
+  <!-- Spade Icon with gold gradient -->
+  <path d="M256 160 C276 200 324 226 324 266 C324 294 300 314 272 314 C258 314 256 302 256 302 C256 302 254 314 240 314 C212 314 188 294 188 266 C188 226 236 200 256 160 Z" fill="url(#gold-mask)"/>
+  <!-- Stem -->
+  <path d="M256 298 C253 318 243 346 224 350 L288 350 C269 346 259 318 256 298 Z" fill="url(#gold-mask)"/>
+</svg>
